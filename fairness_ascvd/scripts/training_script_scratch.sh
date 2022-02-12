@@ -2,8 +2,8 @@ BASE_PATH="/labs/shahlab/projects/agataf/bmj_paper"
 REPO_PATH=$BASE_PATH"/fairness_ascvd/fairness_ascvd"
 
 # TODO: update!!!
-COHORT_PATH="/labs/shahlab/projects/agataf/data/cohorts/pooled_cohorts/cohort/all_cohorts.csv"
-#COHORT_PATH=$BASE_PATH"/pce_data/all_cohorts.csv"
+# COHORT_PATH="/labs/shahlab/projects/agataf/data/cohorts/pooled_cohorts/cohort/all_cohorts.csv"
+COHORT_PATH=$BASE_PATH"/pce_data/all_cohorts.csv"
 
 # generate grid
 #python $REPO_PATH/train/create_grid_all.py --data_path $BASE_PATH --experiment_name_prefix final
@@ -29,7 +29,7 @@ python $REPO_PATH/train/train_model.py --config_path $CONFIG_PATH --result_path 
                                         --cohort_path $COHORT_PATH --logging_path $LOGGING_PATH \
                                         --linear_layer --print_every 50 --save_model_weights \
                                         --save_outputs --logging_evaluate_by_group \
-                                        --stopping_fold_id $FOLD_ID --num_epochs 1 --early_stopping_patience 30 
+                                        --stopping_fold_id $FOLD_ID --num_epochs 100 --early_stopping_patience 30 
 done
 
 
@@ -40,6 +40,8 @@ done
 # EXPERIMENT_PATH=$BASE_PATH"/experiments/"$EXPERIMENT_NAME
 
 # for FOLD_ID in {1..10}
+# #for FOLD_ID in {1..2}
+
 # do
 # for CONFIG_ID in {0..3}
 # do
@@ -55,7 +57,7 @@ done
 #                                         --cohort_path $COHORT_PATH --logging_path $LOGGING_PATH \
 #                                         --linear_layer --print_every 100 --save_model_weights \
 #                                         --save_outputs --logging_evaluate_by_group \
-#                                         --stopping_fold_id $FOLD_ID --num_epochs 1  --early_stopping_patience 30 
+#                                         --stopping_fold_id $FOLD_ID --num_epochs 100  --early_stopping_patience 30 
 # done
 # done
                          

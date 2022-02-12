@@ -104,20 +104,6 @@ class TorchModel:
             self.config_dict["compute_group_min_max"] = True
             self.config_dict["logging_evaluate_by_group"] = True
 
-    # def get_logger(self, logging_path=None):
-    #     """
-    #     Currently unused
-    #     """
-    #     logger = logging.getLogger(__name__)
-    #     logger.setLevel("INFO")
-
-    #     if logging_path is not None:
-    #         logger.addHandler(logging.FileHandler(logging_path))
-    #     else:
-    #         logger.addHandler(logging.StreamHandler(sys.stdout))
-
-    #     return logger
-
     def transform_batch(self, batch, keys=None):
         """
         Sends a batch to the device

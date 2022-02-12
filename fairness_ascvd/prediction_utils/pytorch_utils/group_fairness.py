@@ -9,7 +9,7 @@ from fairness_ascvd.prediction_utils.pytorch_utils.models import (
     FixedWidthModel,
     BilevelModel,
 )
-from fairness_ascvd.prediction_utils.pytorch_utils.layers import FeedforwardNet
+from fairness_ascvd.prediction_utils.pytorch_utils.layers import FeedforwardNet, LinearLayer
 from fairness_ascvd.prediction_utils.pytorch_utils.pytorch_metrics import (
     weighted_mean,
     roc_auc_score_surrogate,
@@ -31,9 +31,11 @@ from fairness_ascvd.prediction_utils.pytorch_utils.pytorch_metrics import get_su
 #   EqualMeanPredictionModel -> penalizes mean difference in predictions with same interface as MMDModel
 #   GroupIRMModel -> Applies the IRM penalty to each group
 #   EqualThresholdRateModel -> penalizes thresholded prediction rates across groups with same interface as MMDModel
+#   GroupCalibrationModel -> penalizes difference in calibration curve across groups with surrogate model
 # GroupMetricRegularizedModel -> penalizes the differences in a differentiable metric across groups
 #   EqualAUCModel
 #   EqualPrecisionModel
+#   EqualAPModel
 #   EqualLossModel
 #   EqualBrierScoreModel
 #   EqualTPRModel
@@ -50,12 +52,14 @@ def group_regularized_model(model_type="loss"):
         "loss": EqualLossModel,
         "baselined_loss": EqualBaselinedLossModel,
         "auc": EqualAUCModel,
+        # "ap": EqualAPModel,
         "brier": EqualBrierScoreModel,
         "mmd": MMDModel,
         "mean_prediction": EqualMeanPredictionModel,
         "threshold_rate": EqualThresholdRateModel,
         "precision": EqualPrecisionModel,
         "adversarial": GroupAdversarialModel,
+        "calibration_invariance": GroupCalibrationInvarianceModel,
         "group_irm": GroupIRMModel,
     }
     the_class = class_dict.get(model_type, None)
@@ -91,21 +95,29 @@ class GroupRegularizedModel(TorchModel):
             "sparse": True,
             "sparse_mode": "csr",  # alternatively, "convert"
             "resnet": False,
+            "linear_layer": False,
         }
         return {**config_dict, **update_dict}
 
     def init_model(self):
-        model = FeedforwardNet(
-            in_features=self.config_dict["input_dim"],
-            hidden_dim_list=self.config_dict["num_hidden"]
-            * [self.config_dict["hidden_dim"]],
-            output_dim=self.config_dict["output_dim"],
-            drop_prob=self.config_dict["drop_prob"],
-            normalize=self.config_dict["normalize"],
-            sparse=self.config_dict["sparse"],
-            sparse_mode=self.config_dict["sparse_mode"],
-            resnet=self.config_dict["resnet"],
-        )
+        # TODO: implement in other places too
+        if self.config_dict.get('linear_layer'):
+            model = LinearLayer(
+                self.config_dict["input_dim"], 
+                self.config_dict["output_dim"]
+            )
+        else:
+            model = FeedforwardNet(
+                in_features=self.config_dict["input_dim"],
+                hidden_dim_list=self.config_dict["num_hidden"]
+                * [self.config_dict["hidden_dim"]],
+                output_dim=self.config_dict["output_dim"],
+                drop_prob=self.config_dict["drop_prob"],
+                normalize=self.config_dict["normalize"],
+                sparse=self.config_dict["sparse"],
+                sparse_mode=self.config_dict["sparse_mode"],
+                resnet=self.config_dict["resnet"],
+            )
         return model
 
     def get_transform_batch_keys(self):
@@ -128,8 +140,6 @@ class GroupRegularizedModel(TorchModel):
             the_data["labels"],
             the_data["group"],
         )
-#         print(inputs)
-#         print(type(inputs))
         outputs = self.model(inputs)
         # Compute the loss
         if self.config_dict.get("weighted_loss"):
@@ -646,6 +656,18 @@ class EqualPositiveRateModel(GroupMetricRegularizedModel):
             threshold=self.config_dict.get("threshold"),
         )
 
+
+# class EqualAPModel(GroupMetricRegularizedModel):
+#     """
+#     Model regularized to have equal average precision across groups.
+#     """
+
+#     def compute_metric(self, outputs, labels, sample_weight=None):
+#         return average_precision_surrogate(
+#             outputs=outputs, labels=labels, sample_weight=sample_weight,
+#         )
+
+
 class EqualLossModel(GroupMetricRegularizedModel):
     """
     Model regularized to have equal mean loss across groups.
@@ -812,3 +834,91 @@ class GroupAdversarialModel(BilevelModel, FixedWidthModel):
         loss_dict_batch["discriminator"].backward()
         self.optimizers_aux["discriminator"].step()
 
+
+class GroupCalibrationInvarianceModel(BilevelModel, GroupRegularizedModel):
+    def get_default_config(self):
+        """
+        Defines default hyperparameters that may be overwritten.
+        """
+        config_dict = super().get_default_config()
+
+        update_dict = {"lr_aux": 1e-4}
+        return {**config_dict, **update_dict}
+
+    def get_model_aux(self):
+        # return LinearLayerWrapper(in_features=1, out_features=2)
+
+        return FeedforwardNet(
+            in_features=1,
+            hidden_dim_list=[16],
+            output_dim=2,
+            drop_prob=0.0,
+            normalize=0.0,
+            sparse=False,
+        )
+
+    def init_models_aux(self):
+        models_aux = {
+            i: self.get_model_aux()
+            for i in range(
+                -1, self.config_dict["num_groups"]
+            )  # -1 refers to the marginal model
+        }
+
+        for model in models_aux.values():
+            model.apply(self.weights_init)
+            model.to(self.device)
+        return models_aux
+
+    def init_optimizers_aux(self):
+        return {
+            i: torch.optim.Adam(
+                [{"params": self.models_aux[i].parameters()}],
+                lr=self.config_dict["lr_aux"],
+            )
+            for i in range(
+                -1, self.config_dict["num_groups"]
+            )  # -1 refers to the marginal model
+        }
+
+    def compute_group_regularization_loss(
+        self, outputs, labels, group, sample_weight=None
+    ):
+        # (TODO) implement sample_weight
+        result = torch.FloatTensor().to(self.device)
+        outputs = F.log_softmax(outputs, dim=1)[:, -1].unsqueeze(1)
+
+        for the_group in group.unique():
+            outputs_group = outputs[group == the_group]
+            log_probs_group = F.softmax(
+                self.models_aux[int(the_group)](outputs_group), dim=1
+            )[:, 1]
+            log_probs_marginal = F.softmax(self.models_aux[-1](outputs_group), dim=1)[
+                :, 1
+            ]
+            result = torch.cat((result, log_probs_group - log_probs_marginal))
+        result = torch.square(result).mean()
+
+        return result
+
+    def update_models_aux(self, the_data):
+
+        outputs = self.model(the_data["features"])
+        outputs = F.log_softmax(outputs, dim=1)[:, -1].unsqueeze(1)
+
+        outputs_marginal = self.models_aux[-1](outputs)
+
+        loss_marginal = self.criterion(outputs_marginal, the_data["labels"])
+
+        loss_marginal.backward(retain_graph=True)
+        self.optimizers_aux[-1].step()
+
+        for the_group in the_data["group"].unique():
+            outputs_group = self.models_aux[int(the_group)](
+                outputs[the_data["group"] == the_group]
+            )
+            loss_group = self.criterion(
+                outputs_group, the_data["labels"][the_data["group"] == the_group]
+            )
+            loss_group.backward(retain_graph=True)
+            self.optimizers_aux[int(the_group)].step()
