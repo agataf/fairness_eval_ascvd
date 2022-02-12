@@ -8,35 +8,35 @@ import torch
 import logging
 import sys
 
-# from fairness_ascvd.prediction_utils.pytorch_utils.models import TorchModel
-# from fairness_ascvd.prediction_utils.pytorch_utils.datasets import ArrayLoaderGenerator
+from fairness_ascvd.prediction_utils.pytorch_utils.models import TorchModel
+from fairness_ascvd.prediction_utils.pytorch_utils.datasets import ArrayLoaderGenerator
+from lifelines import KaplanMeierFitter, LogNormalFitter, WeibullFitter
+
+from fairness_ascvd.prediction_utils.util import yaml_write
+
+from fairness_ascvd.prediction_utils.pytorch_utils.group_fairness import group_regularized_model
+#from fairness_ascvd.prediction_utils.pytorch_utils.robustness import group_robust_model
+#from fairness_ascvd.prediction_utils.pytorch_utils.lagrangian import group_lagrangian_model
+
+from fairness_ascvd.prediction_utils.pytorch_utils.metrics import (
+    StandardEvaluator,
+    #FairOVAEvaluator,
+)
+
+# from prediction_utils.pytorch_utils.models import TorchModel
+# from prediction_utils.pytorch_utils.datasets import ArrayLoaderGenerator
 # from lifelines import KaplanMeierFitter, LogNormalFitter, WeibullFitter
 
-# from fairness_ascvd.prediction_utils.util import yaml_write
+# from prediction_utils.util import yaml_write
 
-# from fairness_ascvd.prediction_utils.pytorch_utils.group_fairness import group_regularized_model
-# from fairness_ascvd.prediction_utils.pytorch_utils.robustness import group_robust_model
-# from fairness_ascvd.prediction_utils.pytorch_utils.lagrangian import group_lagrangian_model
+# from prediction_utils.pytorch_utils.group_fairness import group_regularized_model
+# from prediction_utils.pytorch_utils.robustness import group_robust_model
+# from prediction_utils.pytorch_utils.lagrangian import group_lagrangian_model
 
-# from fairness_ascvd.prediction_utils.pytorch_utils.metrics import (
+# from prediction_utils.pytorch_utils.metrics import (
 #     StandardEvaluator,
 #     FairOVAEvaluator,
 # )
-
-from prediction_utils.pytorch_utils.models import TorchModel
-from prediction_utils.pytorch_utils.datasets import ArrayLoaderGenerator
-from lifelines import KaplanMeierFitter, LogNormalFitter, WeibullFitter
-
-from prediction_utils.util import yaml_write
-
-from prediction_utils.pytorch_utils.group_fairness import group_regularized_model
-from prediction_utils.pytorch_utils.robustness import group_robust_model
-from prediction_utils.pytorch_utils.lagrangian import group_lagrangian_model
-
-from prediction_utils.pytorch_utils.metrics import (
-    StandardEvaluator,
-    FairOVAEvaluator,
-)
 
 import train_utils
 
@@ -656,10 +656,10 @@ if __name__ == "__main__":
         assert args.sensitive_attribute is not None
         if args.group_objective_type == "regularized":
             model_class = group_regularized_model(config_dict["group_objective_metric"])
-        elif args.group_objective_type == "dro":
-            model_class = group_robust_model(config_dict["group_objective_metric"])
-        elif args.group_objective_type == "lagrangian":
-            model_class = group_lagrangian_model(config_dict["group_objective_metric"])
+#         elif args.group_objective_type == "dro":
+#             model_class = group_robust_model(config_dict["group_objective_metric"])
+#         elif args.group_objective_type == "lagrangian":
+#             model_class = group_lagrangian_model(config_dict["group_objective_metric"])
         else:
             raise ValueError("group_objective_type not defined")
 
@@ -735,15 +735,15 @@ if __name__ == "__main__":
                     engine="pyarrow",
                     index=False,
                 )
-            if args.run_evaluation_group_fair_ova:
-                evaluator = FairOVAEvaluator()
-                result_df_group_fair_ova = evaluator.get_result_df(
-                    df = output_df_eval, 
-                    weight_var = 'weights'
-                ).assign(group = lambda x: x.group.astype(str))
-                logging.info(result_df_group_fair_ova)
-                result_df_group_fair_ova.to_parquet(
-                    os.path.join(args.result_path, "result_df_group_fair_ova.parquet"),
-                    engine="pyarrow",
-                    index=False,
-                )
+#             if args.run_evaluation_group_fair_ova:
+#                 evaluator = FairOVAEvaluator()
+#                 result_df_group_fair_ova = evaluator.get_result_df(
+#                     df = output_df_eval, 
+#                     weight_var = 'weights'
+#                 ).assign(group = lambda x: x.group.astype(str))
+#                 logging.info(result_df_group_fair_ova)
+#                 result_df_group_fair_ova.to_parquet(
+#                     os.path.join(args.result_path, "result_df_group_fair_ova.parquet"),
+#                     engine="pyarrow",
+#                     index=False,
+#                 )

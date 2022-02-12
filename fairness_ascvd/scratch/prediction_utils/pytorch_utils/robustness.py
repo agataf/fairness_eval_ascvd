@@ -12,6 +12,7 @@ from fairness_ascvd.prediction_utils.pytorch_utils.pytorch_metrics import (
     indicator,
     logistic_surrogate,
     roc_auc_score_surrogate,
+    IRM_penalty,
     baselined_loss,
 )
 
@@ -25,6 +26,8 @@ def group_robust_model(model_type="loss"):
         "baselined_loss": GroupDROBaselinedLoss,
         "auc": GroupDROAUC,
         "auc_proxy": GroupDROAUCProxy,
+        "IRM_penalty_proxy": GroupDROIRMPenaltyProxy,
+        "grad_norm_proxy": GroupDROGradNormProxy,
         "size_adjusted_loss": GroupDROSizeAdjusted,
         "size_adjusted_loss_reciprocal": GroupDROSizeAdjustedReciprocal,
     }
@@ -343,7 +346,8 @@ class GroupDROAUC(GroupDROModel):
             outputs=outputs,
             labels=labels,
             sample_weight=sample_weight,
-            surrogate="logistic",
+            # surrogate_fn=logistic_surrogate,
+            surrogate='logistic'
         )
 
     def constraint_metric_exact(self, outputs, labels, sample_weight=None):
@@ -351,7 +355,8 @@ class GroupDROAUC(GroupDROModel):
             outputs=outputs,
             labels=labels,
             sample_weight=sample_weight,
-            surrogate="indicator",
+            surrogate='indicator'
+            # surrogate_fn=indicator,
         )
 
 
@@ -361,5 +366,23 @@ class GroupDROAUCProxy(GroupDROModel):
             outputs=outputs,
             labels=labels,
             sample_weight=sample_weight,
-            surrogate="indicator",
+            surrogate='indicator'
+            # surrogate_fn=indicator,
         )
+
+
+class GroupDROIRMPenaltyProxy(GroupDROModel):
+    def constraint_metric_exact(self, outputs, labels, sample_weight=None):
+        return IRM_penalty(outputs=outputs, labels=labels, sample_weight=sample_weight)
+
+
+class GroupDROGradNormProxy(GroupDROModel):
+    def get_default_config(self):
+        config_dict = super().get_default_config()
+        update_dict = {"skip_input_grad": False}
+        return {**config_dict, **update_dict}
+
+    def constraint_metric_exact(self, outputs, labels, sample_weight):
+        loss = weighted_cross_entropy_loss(outputs, labels, sample_weight=sample_weight)
+        grad_norm = self.compute_grad_norm(loss)
+        return grad_norm

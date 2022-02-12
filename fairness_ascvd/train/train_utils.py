@@ -8,25 +8,25 @@ import math
 
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from torch.utils.data import TensorDataset, DataLoader
-# from fairness_ascvd.prediction_utils.pytorch_utils.datasets import ArrayDataset
-# from fairness_ascvd.prediction_utils.pytorch_utils.models import TorchModel
-# from fairness_ascvd.prediction_utils.pytorch_utils.robustness import GroupDROModel
+from fairness_ascvd.prediction_utils.pytorch_utils.datasets import ArrayDataset
+from fairness_ascvd.prediction_utils.pytorch_utils.models import TorchModel
+#from fairness_ascvd.prediction_utils.pytorch_utils.robustness import GroupDROModel
 
-# from fairness_ascvd.prediction_utils.util import yaml_write
+from fairness_ascvd.prediction_utils.util import yaml_write
 
-# from fairness_ascvd.prediction_utils.pytorch_utils.layers import LinearLayer
-# from fairness_ascvd.prediction_utils.pytorch_utils.lagrangian import MultiLagrangianThresholdRateModel
-# from fairness_ascvd.prediction_utils.pytorch_utils.group_fairness import EqualThresholdRateModel
+from fairness_ascvd.prediction_utils.pytorch_utils.layers import LinearLayer
+#from fairness_ascvd.prediction_utils.pytorch_utils.lagrangian import MultiLagrangianThresholdRateModel
+from fairness_ascvd.prediction_utils.pytorch_utils.group_fairness import EqualThresholdRateModel
 
-from prediction_utils.pytorch_utils.datasets import ArrayDataset
-from prediction_utils.pytorch_utils.models import TorchModel
-from prediction_utils.pytorch_utils.robustness import GroupDROModel
+# from prediction_utils.pytorch_utils.datasets import ArrayDataset
+# from prediction_utils.pytorch_utils.models import TorchModel
+# from prediction_utils.pytorch_utils.robustness import GroupDROModel
 
-from prediction_utils.util import yaml_write
+# from prediction_utils.util import yaml_write
 
-from prediction_utils.pytorch_utils.layers import LinearLayer
-from prediction_utils.pytorch_utils.lagrangian import MultiLagrangianThresholdRateModel
-from prediction_utils.pytorch_utils.group_fairness import EqualThresholdRateModel
+# from prediction_utils.pytorch_utils.layers import LinearLayer
+# from prediction_utils.pytorch_utils.lagrangian import MultiLagrangianThresholdRateModel
+# from prediction_utils.pytorch_utils.group_fairness import EqualThresholdRateModel
 
 
 class EqualThresholdRateModelLinear(EqualThresholdRateModel):
@@ -38,14 +38,14 @@ class EqualThresholdRateModelLinear(EqualThresholdRateModel):
             self.config_dict["input_dim"], self.config_dict["output_dim"]
         )
 
-class MultiLagrangianThresholdModelLinear(MultiLagrangianThresholdRateModel):
-    """
-    Override default to use logistic regression
-    """
-    def init_model(self):
-        return LinearLayer(
-            self.config_dict["input_dim"], self.config_dict["output_dim"]
-        )
+# class MultiLagrangianThresholdModelLinear(MultiLagrangianThresholdRateModel):
+#     """
+#     Override default to use logistic regression
+#     """
+#     def init_model(self):
+#         return LinearLayer(
+#             self.config_dict["input_dim"], self.config_dict["output_dim"]
+#         )
 
 
 class Dataset:
@@ -176,10 +176,10 @@ def model_setup(config_dict, logger, args):
     assert(config_dict['group_objective_type'] in ["standard", "lagrangian", "dro", "regularized"]), print('group_objective_type must be one of ["standard", "lagrangian", "dro", "regularized"]') 
     if config_dict['group_objective_type'] == 'standard':
         model_class = TorchModel
-    elif config_dict['group_objective_type'] == 'lagrangian':
-        model_class = MultiLagrangianThresholdModelLinear
-    elif config_dict['group_objective_type'] == 'dro':
-        model_class = GroupDROModel
+#     elif config_dict['group_objective_type'] == 'lagrangian':
+#         model_class = MultiLagrangianThresholdModelLinear
+#     elif config_dict['group_objective_type'] == 'dro':
+#         model_class = GroupDROModel
     elif config_dict['group_objective_type'] == 'regularized':
         model_class = EqualThresholdRateModelLinear
 

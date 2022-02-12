@@ -14,8 +14,11 @@ setup(
                       'matplotlib==3.3.2',
                       'numpy==1.19.2',
                       'pandas==1.1.3',
-                      #'PyYAML==6.0',
+                      'pyarrow',
+                      'PyYAML==6.0',
                       'scikit_learn==1.0.2',
+                      'scipy==1.8.0',
+                      'setuptools==58.0.4',
                       'seaborn==0.11.0',
                       'torch==1.8.0'
                      ]

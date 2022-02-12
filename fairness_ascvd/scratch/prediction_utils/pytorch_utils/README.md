@@ -18,6 +18,8 @@ Description of files
         * Defines regularized objectives for group fairness
     * robustness.py
         * Defines distributionally robust objectives to optimize for worst-group performance
+    * lagrangian.py
+        * Defines approximately constrained objectives for constraints on data- and model- dependent quantities
     * pytorch_metrics.py
         * Differentiable metrics that can be used in loss functions in pytorch
     * metric_logging.py

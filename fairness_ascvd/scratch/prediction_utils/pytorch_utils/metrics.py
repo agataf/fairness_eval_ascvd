@@ -10,9 +10,7 @@ from sklearn.metrics import (
     log_loss,
     recall_score,
     precision_score,
-    roc_curve,
 )
-from sklearn.metrics._ranking import _binary_clf_curve
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import KBinsDiscretizer
 from sklearn.ensemble import RandomForestClassifier
@@ -100,31 +98,27 @@ class StandardEvaluator:
                 .reset_index()
             )
         else:
-            result_df = {}
-            for strata_id, strata_df in df.groupby(strata_vars):
-                strata_dict = {}
-                labels = strata_df[label_var].values
-                pred_probs = strata_df[pred_prob_var].values
-                if weight_var is not None:
-                    sample_weight = strata_df[weight_var].values
-
-                for metric, metric_func in metric_fns.items():
-                    if weight_var is None:
-                        strata_dict[metric] = metric_func(labels, pred_probs)
-                    else:
-                        strata_dict[metric] = metric_func(
-                            labels, pred_probs, sample_weight=sample_weight
+            result_df = df_dict_concat(
+                {
+                    metric: df.groupby(strata_vars)
+                    .apply(
+                        lambda x: metric_func(
+                            x[label_var].values, x[pred_prob_var].values
                         )
-                result_df[strata_id] = (
-                    pd.Series(strata_dict).rename(result_name).rename_axis("metric")
-                )
-            return (
-                pd.concat(result_df)
-                .rename_axis(strata_vars + ["metric"])
-                .to_frame()
-                .reset_index()
+                        if weight_var is None
+                        else metric_func(
+                            x[label_var].values,
+                            x[pred_prob_var].values,
+                            sample_weight=x[weight_var].values,
+                        )
+                    )
+                    .rename(index=result_name)
+                    .rename_axis(strata_vars)
+                    .reset_index()
+                    for metric, metric_func in metric_fns.items()
+                },
+                "metric",
             )
-
         return result_df
 
     def get_result_df(
@@ -138,7 +132,6 @@ class StandardEvaluator:
         result_name="performance",
         compute_group_min_max=False,
         group_overall_name="overall",
-        compute_overall=False,
     ):
         """
         A convenience function that calls evaluate with and without stratifying on group_var_name
@@ -148,7 +141,7 @@ class StandardEvaluator:
         else:
             strata_vars = []
 
-        if group_overall_name in df[group_var_name].unique().tolist():
+        if group_overall_name in (df[group_var_name].unique()):
             raise ValueError("group_overall_name must not be a defined group")
 
         if group_var_name in strata_vars:
@@ -172,9 +165,6 @@ class StandardEvaluator:
             )
             result_df_min_max[group_var_name] = group_overall_name
             result_df_by_group = pd.concat([result_df_by_group, result_df_min_max])
-
-        if not compute_overall:
-            return result_df_by_group
 
         result_df_overall = self.evaluate(
             df,
@@ -201,7 +191,7 @@ class StandardEvaluator:
         result = (
             df.query("~{}.isnull()".format(group_var_name), engine="python")
             .groupby(strata_vars)[[result_name]]
-            .agg(["min", "max", "var"])
+            .agg(["min", "max"])
             .reset_index()
             .melt(id_vars=strata_vars)
             .assign(metric=lambda x: x["metric"].str.cat(x["variable_1"], sep="_"))
@@ -435,15 +425,6 @@ class StandardEvaluator:
                 )
                 for threshold in thresholds
             }
-
-        if "recall_recalib" in threshold_metrics:
-            result["recall_recalib"] = {
-                "recall_recalib_{}".format(threshold): generate_recall_at_threshold(
-                    threshold, weighted=weighted, recalibrate=True
-                )
-                for threshold in thresholds
-            }
-
         if "precision" in threshold_metrics:
             result["precision"] = {
                 "precision_{}".format(threshold): generate_precision_at_threshold(
@@ -458,22 +439,32 @@ class StandardEvaluator:
                 )
                 for threshold in thresholds
             }
-
-        if "fpr" in threshold_metrics:
-            result["fpr"] = {
-                "fpr_{}".format(threshold): generate_fpr_at_threshold(
-                    threshold, weighted=weighted
-                )
-                for threshold in thresholds
-            }
-
-        if "fpr_recalib" in threshold_metrics:
-            result["fpr_recalib"] = {
-                "fpr_recalib_{}".format(threshold): generate_fpr_at_threshold(
-                    threshold, weighted=weighted, recalibrate=True
-                )
-                for threshold in thresholds
-            }
+# <<<<<<< HEAD
+#         if "observation_rate" in threshold_metrics:
+#             result["observation_rate"] = {
+#                 "observation_rate_{}".format(threshold):  lambda *args, **kwargs: observation_rates_at_points(
+#                     points=[threshold],
+#                     *args, 
+#                     model_type="logistic",
+#                     transform="log",
+#                     **kwargs
+#                 )
+#                 for threshold in thresholds
+#             }      
+# #         points,
+# #         labels,
+# #         pred_probs,
+# #         sample_weight=None,
+# #         model_type="logistic",
+# #         transform=None,
+# #             "rate_at_thresholds": lambda *args, **kwargs: observation_rates_at_points(
+# #                 *args,
+# #                 points=[threshold],
+# #                 model_type="logistic",
+# #                 transform="log",
+# #                 **kwargs,
+# #             ),
+# =======
 
         if "tce_abs_logistic_logit" in threshold_metrics:
             result["tce_abs_logistic_logit"] = {
@@ -549,38 +540,7 @@ class StandardEvaluator:
                 for threshold in thresholds
             }
 
-        if "net_benefit" in threshold_metrics:
-            result["net_benefit"] = {
-                f"net_benefit_{threshold}": generate_net_benefit(
-                    threshold=threshold, recalibrate=False
-                )
-                for threshold in thresholds
-            }
-
-        if "net_benefit_recalib" in threshold_metrics:
-            result["net_benefit_recalib"] = {
-                f"net_benefit_recalib_{threshold}": generate_net_benefit(
-                    threshold=threshold, recalibrate=True
-                )
-                for threshold in thresholds
-            }
-
-        if "net_benefit_rr" in threshold_metrics:
-            result["net_benefit_rr"] = {
-                f"net_benefit_rr_{threshold}": generate_net_benefit_rr(
-                    threshold=threshold, recalibrate=False
-                )
-                for threshold in thresholds
-            }
-
-        if "net_benefit_rr_recalib" in threshold_metrics:
-            result["net_benefit_recalib"] = {
-                f"net_benefit_rr_recalib_{threshold}": generate_net_benefit_rr(
-                    threshold=threshold, recalibrate=True
-                )
-                for threshold in thresholds
-            }
-
+#>>>>>>> 83aaae12d0785b8dca6f522ca738648f11132a16
         if len(result) > 0:
             return dict(ChainMap(*result.values()))
         else:
@@ -669,7 +629,6 @@ class StandardEvaluator:
                     group_var_name=strata_var_group,
                     weight_var=weight_var,
                     compute_group_min_max=compute_group_min_max,
-                    compute_overall=compute_overall,
                     group_overall_name=group_overall_name,
                     label_var=label_var,
                 )
@@ -776,15 +735,168 @@ class StandardEvaluator:
         return result_df_ci
 
 
+class FairOVAEvaluator(StandardEvaluator):
+    """
+    Computes fairness metrics in a "one-vs-all" (OVA) manner
+    Supported functionality
+        * Computing a metric for each group and comparing to the value for the whole population
+        * Computing cross-group ranking metrics (xAUC)
+        * Comparing the distribution of predictions for each group with the marginal
+    """
+
+    def __init__(self, metrics=None, threshold_metrics=None, thresholds=None):
+        super().__init__(
+            metrics=metrics, threshold_metrics=threshold_metrics, thresholds=thresholds
+        )
+
+    def get_fair_ova_fns(self, weighted=False):
+        """
+        Returns a dictionary of fair OVA metric functions
+        """
+        metric_fn_dict = self.get_metric_fns(
+            metrics=self.metrics,
+            threshold_metrics=self.threshold_metrics,
+            thresholds=self.thresholds,
+            weighted=weighted,
+        )
+        # Lazy evaluation, see https://sopython.com/wiki/Common_Gotchas_In_Python
+        metric_fairness_ova_dict = {
+            "{}_ova".format(
+                key
+            ): lambda *args, metric_fn=value, **kwargs: metric_fairness_ova(
+                *args, metric_fn=metric_fn, **kwargs
+            )
+            for key, value in metric_fn_dict.items()
+        }
+        xauc_dict = self.get_xauc_fns(weighted=weighted)
+        emd_ova_dict = self.get_emd_fns(weighted=weighted)
+        fair_fn_dict = {**metric_fairness_ova_dict, **emd_ova_dict, **xauc_dict}
+        return fair_fn_dict
+
+    def get_xauc_fns(self, weighted=False):
+        """
+        Returns a dictionary of xAUC metric functions
+        """
+        return {
+            "xauc_1_ova": lambda *args, **kwargs: xauc(
+                *args, **kwargs, the_label=1, exclude_the_group_from_marginal=False
+            ),
+            "xauc_0_ova": lambda *args, **kwargs: xauc(
+                *args, **kwargs, the_label=0, exclude_the_group_from_marginal=False
+            ),
+            "xauc_1": lambda *args, **kwargs: xauc(
+                *args, **kwargs, the_label=1, exclude_the_group_from_marginal=True
+            ),
+            "xauc_0": lambda *args, **kwargs: xauc(
+                *args, **kwargs, the_label=0, exclude_the_group_from_marginal=True
+            ),
+        }
+
+    def get_emd_fns(self, weighted=False):
+        """
+        Returns functions that compares the earth movers distance across distributions of predictions across groups
+        """
+        return {
+            "emd_ova": lambda *args, **kwargs: emd_ova(*args, the_label=None, **kwargs),
+            "emd_0_ova": lambda *args, **kwargs: emd_ova(*args, the_label=0, **kwargs),
+            "emd_1_ova": lambda *args, **kwargs: emd_ova(*args, the_label=1, **kwargs),
+        }
+
+    def get_result_df(
+        self,
+        df,
+        strata_vars=["attribute", "task", "phase"],
+        group_var_name="group",
+        weight_var=None,
+        label_var="labels",
+        pred_prob_var="pred_probs",
+        result_name="performance",
+    ):
+        """
+        Evaluates predictions against a set of labels with a set of fair OVA metric function
+        Arguments:
+            df: a dataframe with one row per prediction
+            strata_vars: a list of string identifiers of columns to stratify the evaluation on
+            group_var_name: a string identifier indicating which column corresponds to the group variable
+            weight_var: a string identifier for sample weights in df
+            label_var: a string identifier for the outcome labels in df
+            pred_prob_var: a string identifier for the predicted probabilities in df
+            result_name: a string that will be used to label the metric values in the result
+        """
+        assert group_var_name is not None
+        metric_fns = self.get_fair_ova_fns(weighted=weight_var is not None)
+
+        if df[pred_prob_var].dtype == "float32":
+            # df[pred_prob_var] = df[pred_prob_var].astype(np.float64)
+            df.loc[:, pred_prob_var] = df[pred_prob_var].astype(np.float64)
+
+        if strata_vars is None:
+            strata_vars = ["task", "attribute", "phase"]
+
+        strata_vars = [var for var in strata_vars if var in df.columns]
+        if len(strata_vars) == 0:
+            # No strata vars are provided
+            result = {}
+            for metric_fn_key, group_id in itertools.product(
+                metric_fns.keys(), df[group_var_name].unique()
+            ):
+                result[(metric_fn_key, group_id)] = metric_fns[metric_fn_key](
+                    df[label_var].values,
+                    df[pred_prob_var].values,
+                    df[group_var_name].values,
+                    the_group=group_id,
+                    sample_weight=df[weight_var].values
+                    if weight_var is not None
+                    else None,
+                )
+            result_df = pd.DataFrame(result, index=[0]).transpose()
+            result_df = (
+                result_df.rename_axis(["metric", group_var_name])
+                .rename(columns={0: result_name})
+                .reset_index()
+            )
+
+        else:
+            stratified = df.groupby(strata_vars)
+            result = {}
+            for (meta, df_strata) in stratified:
+                if isinstance(meta, str) or isinstance(meta, int):
+                    # If only one strata var
+                    meta = tuple([meta])
+                for metric_fn_key, group_id in itertools.product(
+                    metric_fns.keys(), df_strata[group_var_name].unique()
+                ):
+                    result_key = tuple([metric_fn_key]) + meta + tuple([group_id])
+                    result[result_key] = metric_fns[metric_fn_key](
+                        df_strata[label_var].values,
+                        df_strata[pred_prob_var].values,
+                        df_strata[group_var_name].values,
+                        the_group=group_id,
+                        sample_weight=df_strata[weight_var].values
+                        if weight_var is not None
+                        else None,
+                    )
+            result_df = pd.DataFrame(result, index=[0]).transpose()
+            result_df = (
+                result_df.rename_axis(["metric"] + strata_vars + [group_var_name])
+                .rename(columns={0: result_name})
+                .reset_index()
+            )
+
+        return result_df
+
+    def evaluate(self, *args, **kwargs):
+        return self.get_result_df(*args, **kwargs)
+
+
 class CalibrationEvaluator:
     """
     Evaluator that computes absolute and relative calibration errors
-    TODOs:
-        Single call to generate 
-            a set of absolute metrics (ACE and TCE)
-            using a group variable to generate RCE and R-TCE
-            with bootstrapping functionality
-            and the ability to log calibration curves
+    (TODOs)
+        # Single call can generate a set of absolute metrics (ACE and TCE)
+        # Single call can also use a group variable to generate RCE and R-TCE
+        # Bootstrapping functionality
+        # Ability to log calibration curves
     """
 
     @staticmethod
@@ -842,12 +954,7 @@ class CalibrationEvaluator:
             df = df.assign(model_input=lambda x: x.pred_probs)
             model_predict_input = score_values.copy()
         elif transform in valid_transforms:
-            # df = df.query("(pred_probs > 1e-15) & (pred_probs < (1 - 1e-15))")
-            df = df.assign(
-                pred_probs=lambda x: self.clean_for_log_transform(
-                    x.pred_probs.values, eps=1e-6
-                )
-            )
+            df = df.query("(pred_probs > 1e-15) & (pred_probs < (1 - 1e-15))")
             if transform == "log":
                 df = df.assign(model_input=lambda x: np.log(x.pred_probs))
                 model_predict_input = np.log(score_values.copy())
@@ -870,7 +977,10 @@ class CalibrationEvaluator:
         if len(pred_probs.shape) > 1:
             pred_probs = pred_probs[:, -1]
         result = pd.DataFrame(
-            {"score": score_values, "calibration_density": pred_probs}
+            {
+                "score": score_values,
+                "calibration_density": pred_probs
+            }
         )
 
         if return_model:
@@ -888,6 +998,10 @@ class CalibrationEvaluator:
         replicate_aggregation_mode=None,
         strata_var_experiment=None,
         baseline_experiment_name=None,
+        strata_var_group=None,
+        compute_overall=False,
+        group_overall_name="overall",
+        compute_group_min_max=False,
         result_name="performance",
         weight_var=None,
         label_var="labels",
@@ -907,6 +1021,9 @@ class CalibrationEvaluator:
             replicate_aggregation_mode: None or 'mean'
             strata_var_experiment: The variable designating experimental condition column
             baseline_experiment_name: An element of strata_var_experiment column designating a baseline experiment
+            strata_var_group: The variable designating a group
+            compute_overall: If true, computes overall metrics without stratifying by group
+            compute_group_min_max: If true, computes min and max metrics without stratifying by group
             result_name: The name of the returned metrics in the result dataframe
             weight_var: The variable designating sample weights
             label_var: The variable designating the outcome variable
@@ -1010,10 +1127,7 @@ class CalibrationEvaluator:
             df = df.assign(model_input=lambda x: x.pred_probs)
             model_input = df.model_input.values.reshape(-1, 1)
         elif transform in valid_transforms:
-            # df = df.query("(pred_probs > 1e-15) & (pred_probs < (1 - 1e-15))")
-            df = df.assign(
-                pred_probs=lambda x: self.clean_for_log_transform(x.pred_probs.values)
-            )
+            df = df.query("(pred_probs > 1e-15) & (pred_probs < (1 - 1e-15))")
             if transform == "log":
                 df = df.assign(model_input=lambda x: np.log(x.pred_probs))
             elif transform == "c_log_log":
@@ -1037,6 +1151,45 @@ class CalibrationEvaluator:
         df = df.assign(calibration_density=calibration_density)
         return df, model
 
+    def observation_rates_at_points(
+        self,
+        
+        labels,
+        pred_probs,
+        sample_weight=None,
+        model_type="logistic",
+        transform=None,
+    ):
+
+        df, model = self.get_calibration_density_df(
+            labels,
+            pred_probs,
+            sample_weight=sample_weight,
+            model_type=model_type,
+            transform=transform,
+        )
+        
+        valid_transforms = ["log", "c_log_log", "logit"]
+        
+        if transform is None:
+            points = np.array(points).reshape(-1, 1)
+        elif transform in valid_transforms:
+            if transform == "log":
+                points = np.array(np.log(points)).reshape(-1, 1)
+            elif transform == "c_log_log":
+                points = np.array(self.c_log_log(points)).reshape(-1, 1)
+            elif transform == "logit":
+                points = np.array(self.logit(points)).reshape(-1, 1)
+        else:
+            raise ValueError("Invalid transform provided")
+        
+        calibration_density = model.predict_proba(points)
+        if len(calibration_density.shape) > 1:
+            calibration_density = calibration_density[:, -1]
+            
+        return calibration_density
+
+            
     def absolute_calibration_error(
         self,
         labels,
@@ -1276,7 +1429,6 @@ class CalibrationEvaluator:
                 .reset_index()
             )
             result_dict["calibration_density_overall"] = calibration_density_df_overall
-
         return result_dict
 
     @staticmethod
@@ -1285,7 +1437,7 @@ class CalibrationEvaluator:
 
     @staticmethod
     def logit(x):
-        return scipy.special.logit(x)
+        return np.log(x / (1 - x))
 
     @staticmethod
     def weighted_mean(x, sample_weight=None):
@@ -1315,810 +1467,6 @@ class CalibrationEvaluator:
         else:
             raise ValueError("Invalid model_type not provided")
         return model
-
-
-class RocNbEvaluator(CalibrationEvaluator):
-    def get_roc_df(
-        self,
-        df,
-        label_var="ascvd_binary",
-        pred_prob_var="pred_probs",
-        weight_var="ipcw_weight",
-        strata_vars=None,
-        rr=False,
-        **kwargs,
-    ):
-        if rr:
-            the_method = self.get_roc_rr
-        else:
-            the_method = self.get_roc
-
-        if strata_vars is None:
-            result = the_method(
-                labels=df[label_var].values,
-                pred_probs=df[pred_prob_var].values,
-                sample_weight=df[weight_var].values if weight_var is not None else None,
-                **kwargs,
-            )
-        else:
-            result = (
-                df.groupby(strata_vars)
-                .apply(
-                    lambda x: the_method(
-                        labels=x[label_var].values,
-                        pred_probs=x[pred_prob_var].values,
-                        sample_weight=x[weight_var].values
-                        if weight_var is not None
-                        else None,
-                        **kwargs,
-                    )
-                )
-                .reset_index(level=-1, drop=True)
-                .reset_index()
-            )
-        return result
-
-    def get_roc(
-        self,
-        labels,
-        pred_probs,
-        sample_weight=None,
-        compute_calibration=True,
-        nb_thresholds=None,
-        interpolate_roc=False,
-        interpolation_values=None,
-    ):
-
-        roc_result = roc_curve(labels, pred_probs, sample_weight=sample_weight)
-        p_y = np.average(labels, weights=sample_weight)
-
-        roc_df = pd.DataFrame(
-            {
-                "fpr": roc_result[0],
-                "tpr": roc_result[1],
-                "threshold": roc_result[2],
-                "p_y": p_y,
-            }
-        ).query("threshold > 0 & threshold < 1")
-
-        if interpolate_roc or interpolation_values is not None:
-            if interpolation_values is None:
-                scores = np.linspace(
-                    roc_df.threshold.min(), roc_df.threshold.max(), 500
-                )
-            else:
-                scores = interpolation_values
-
-            roc_df = pd.DataFrame(
-                {
-                    "fpr": scipy.interpolate.interp1d(
-                        roc_df.threshold.values,
-                        roc_df.fpr.values,
-                        kind="previous",
-                        bounds_error=False,
-                        fill_value=(1, 0),
-                    )(scores),
-                    "tpr": scipy.interpolate.interp1d(
-                        roc_df.threshold.values,
-                        roc_df.tpr.values,
-                        kind="previous",
-                        bounds_error=False,
-                        fill_value=(1, 0),
-                    )(scores),
-                    "threshold": scores,
-                    "p_y": p_y,
-                }
-            ).query("threshold > 0 & threshold < 1")
-
-        roc_df = roc_df.assign(
-            nb=lambda x: x.tpr * x.p_y
-            - (1 - x.p_y) * x.fpr * (x.threshold / (1 - x.threshold)),
-            nb_all=lambda x: 1 * x.p_y
-            - (1 - x.p_y) * 1 * (x.threshold / (1 - x.threshold)),
-            nb_none=lambda x: 0 * x.p_y
-            - (1 - x.p_y) * 0 * (x.threshold / (1 - x.threshold)),
-        )
-        if nb_thresholds is not None:
-            for nb_threshold in nb_thresholds:
-                roc_df = roc_df.assign(
-                    **{
-                        f"nb_{nb_threshold}": lambda x: x.tpr * x.p_y
-                        - (1 - x.p_y) * x.fpr * (nb_threshold / (1 - nb_threshold))
-                    }
-                )
-
-        if compute_calibration:
-            calibration_curve = self.get_calibration_curve(
-                labels=labels,
-                pred_probs=pred_probs,
-                sample_weight=sample_weight,
-                model_type="logistic",
-                transform="logit",
-                score_values=roc_df.threshold.values,
-            )
-
-            calibration_curve = calibration_curve.sort_values("score").query(
-                "~score.isnull()"
-            )
-            roc_df = roc_df.sort_values("threshold")
-            assert calibration_curve.shape[0] == roc_df.shape[0]
-            assert calibration_curve["score"].values[0] == roc_df["threshold"].values[0]
-            assert (
-                calibration_curve["score"].values[-1] == roc_df["threshold"].values[-1]
-            )
-            roc_df = roc_df.assign(
-                score=calibration_curve.score.values,
-                calibration_density=calibration_curve.calibration_density.values,
-            )
-            assert (roc_df["threshold"] - roc_df["score"]).sum() < 1e-5
-            roc_df = roc_df.assign(
-                calibration_density=lambda x: np.maximum(
-                    np.minimum(x.calibration_density, 1 - 1e-15), 1e-15
-                )
-            )
-            roc_df = roc_df.assign(
-                fpr_implied=scipy.interpolate.interp1d(
-                    roc_df.calibration_density.values,
-                    roc_df.fpr.values,
-                    kind="previous",
-                    bounds_error=False,
-                    fill_value=(1, 0),
-                )(roc_df.score),
-                tpr_implied=scipy.interpolate.interp1d(
-                    roc_df.calibration_density.values,
-                    roc_df.tpr.values,
-                    kind="previous",
-                    bounds_error=False,
-                    fill_value=(1, 0),
-                )(roc_df.score),
-            )
-            roc_df = roc_df.assign(
-                nb_implied=lambda x: x.tpr_implied * x.p_y
-                - (1 - x.p_y) * x.fpr_implied * (x.score / (1 - x.score)),
-            )
-            if nb_thresholds is not None:
-                for nb_threshold in nb_thresholds:
-                    roc_df = roc_df.assign(
-                        **{
-                            f"nb_{nb_threshold}_implied": lambda x: x.tpr_implied
-                            * x.p_y
-                            - (1 - x.p_y)
-                            * x.fpr_implied
-                            * (nb_threshold / (1 - nb_threshold))
-                        }
-                    )
-
-        return roc_df
-
-    def get_rates(self, labels, pred_probs, sample_weight=None):
-        fps, tps, thresholds = _binary_clf_curve(
-            labels, pred_probs, sample_weight=sample_weight
-        )
-        tns = fps[-1] - fps
-        fns = tps[-1] - tps
-        prevalence = tps[-1] / (tps[-1] + fps[-1])
-        pred_pos = tps + fps
-        pred_pos_rate = pred_pos / (fps[-1] + tps[-1])
-        tpr = tps / (tps + fns)
-        fpr = fps / (fps + tns)
-        ppv = tps / (tps + fps)
-        ppv[np.isnan(ppv)] = 0
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            npv = tns / (tns + fns)
-        npv[np.isnan(npv)] = 1
-
-        return {
-            "threshold": thresholds,
-            "tpr": tpr,
-            "fpr": fpr,
-            "pred_pos_rate": pred_pos_rate,
-            "ppv": ppv,
-            "npv": npv,
-            "p_y": prevalence,
-        }
-
-    def get_roc_rr(
-        self,
-        labels,
-        pred_probs,
-        sample_weight=None,
-        compute_calibration=True,
-        nb_thresholds=None,
-        interpolate_roc=False,
-        interpolation_values=None,
-        risk_reduction=0.275,
-    ):
-
-        roc_result = self.get_rates(labels, pred_probs, sample_weight=sample_weight)
-
-        roc_df = pd.DataFrame(roc_result).query("threshold > 0 & threshold < 1")
-        roc_df = roc_df.sort_values("threshold")
-        if interpolate_roc or interpolation_values is not None:
-            if interpolation_values is None:
-                scores = np.linspace(
-                    roc_df.threshold.min(), roc_df.threshold.max(), 500
-                )
-            else:
-                scores = interpolation_values
-
-            roc_df = pd.DataFrame(
-                {
-                    "fpr": scipy.interpolate.interp1d(
-                        roc_df.threshold.values,
-                        roc_df.fpr.values,
-                        kind="previous",
-                        bounds_error=False,
-                        fill_value=(1, 0),
-                    )(scores),
-                    "tpr": scipy.interpolate.interp1d(
-                        roc_df.threshold.values,
-                        roc_df.tpr.values,
-                        kind="previous",
-                        bounds_error=False,
-                        fill_value=(1, 0),
-                    )(scores),
-                    "npv": scipy.interpolate.interp1d(
-                        roc_df.threshold.values,
-                        roc_df.npv.values,
-                        kind="previous",
-                        bounds_error=False,
-                        fill_value=(roc_df.npv.values[0], roc_df.npv.values[-1]),
-                    )(scores),
-                    "ppv": scipy.interpolate.interp1d(
-                        roc_df.threshold.values,
-                        roc_df.ppv.values,
-                        kind="previous",
-                        bounds_error=False,
-                        fill_value=(roc_df.ppv.values[0], roc_df.ppv.values[-1]),
-                    )(scores),
-                    "pred_pos_rate": scipy.interpolate.interp1d(
-                        roc_df.threshold.values,
-                        roc_df.pred_pos_rate.values,
-                        kind="previous",
-                        bounds_error=False,
-                        fill_value=(
-                            roc_df.pred_pos_rate.values[0],
-                            roc_df.pred_pos_rate.values[-1],
-                        ),
-                    )(scores),
-                    "threshold": scores,
-                    "p_y": roc_result["p_y"],
-                }
-            ).query("threshold > 0 & threshold < 1")
-
-        roc_df = roc_df.assign(
-            nb=lambda x: -1 * (1 - x.npv) * (1 - x.pred_pos_rate)
-            - (1 - risk_reduction) * x.ppv * x.pred_pos_rate
-            - risk_reduction * x.threshold * x.pred_pos_rate
-            + x.p_y,
-            nb_all=lambda x: risk_reduction * x.p_y - risk_reduction * x.threshold,
-            nb_none=0,
-        )
-        if nb_thresholds is not None:
-            for nb_threshold in nb_thresholds:
-                roc_df = roc_df.assign(
-                    **{
-                        f"nb_{nb_threshold}": lambda x: -1
-                        * (1 - x.npv)
-                        * (1 - x.pred_pos_rate)
-                        - (1 - risk_reduction) * x.ppv * x.pred_pos_rate
-                        - risk_reduction * nb_threshold * x.pred_pos_rate
-                        + x.p_y
-                    }
-                )
-
-        if compute_calibration:
-            calibration_curve = self.get_calibration_curve(
-                labels=labels,
-                pred_probs=pred_probs,
-                sample_weight=sample_weight,
-                model_type="logistic",
-                transform="logit",
-                score_values=roc_df.threshold.values,
-            )
-
-            calibration_curve = calibration_curve.sort_values("score").query(
-                "~score.isnull()"
-            )
-            roc_df = roc_df.sort_values("threshold")
-            assert calibration_curve.shape[0] == roc_df.shape[0]
-            assert calibration_curve["score"].values[0] == roc_df["threshold"].values[0]
-            assert (
-                calibration_curve["score"].values[-1] == roc_df["threshold"].values[-1]
-            )
-            roc_df = roc_df.assign(
-                score=calibration_curve.score.values,
-                calibration_density=calibration_curve.calibration_density.values,
-            )
-            assert (roc_df["threshold"] - roc_df["score"]).sum() < 1e-5
-            roc_df = roc_df.assign(
-                calibration_density=lambda x: np.maximum(
-                    np.minimum(x.calibration_density, 1 - 1e-15), 1e-15
-                )
-            )
-            roc_df = roc_df.assign(
-                fpr_implied=scipy.interpolate.interp1d(
-                    roc_df.calibration_density.values,
-                    roc_df.fpr.values,
-                    kind="previous",
-                    bounds_error=False,
-                    fill_value=(1, 0),
-                )(roc_df.score),
-                tpr_implied=scipy.interpolate.interp1d(
-                    roc_df.calibration_density.values,
-                    roc_df.tpr.values,
-                    kind="previous",
-                    bounds_error=False,
-                    fill_value=(1, 0),
-                )(roc_df.score),
-                npv_implied=scipy.interpolate.interp1d(
-                    roc_df.calibration_density.values,
-                    roc_df.npv.values,
-                    kind="previous",
-                    bounds_error=False,
-                    fill_value=(roc_df.npv.values[0], roc_df.npv.values[-1]),
-                )(roc_df.score),
-                ppv_implied=scipy.interpolate.interp1d(
-                    roc_df.calibration_density.values,
-                    roc_df.ppv.values,
-                    kind="previous",
-                    bounds_error=False,
-                    fill_value=(roc_df.ppv.values[0], roc_df.ppv.values[-1]),
-                )(roc_df.score),
-                pred_pos_rate_implied=scipy.interpolate.interp1d(
-                    roc_df.calibration_density.values,
-                    roc_df.pred_pos_rate.values,
-                    kind="previous",
-                    bounds_error=False,
-                    fill_value=(
-                        roc_df.pred_pos_rate.values[0],
-                        roc_df.pred_pos_rate.values[-1],
-                    ),
-                )(scores),
-            )
-            roc_df = roc_df.assign(
-                nb_implied=lambda x: -1
-                * (1 - x.npv_implied)
-                * (1 - x.pred_pos_rate_implied)
-                - (1 - risk_reduction) * x.ppv_implied * x.pred_pos_rate_implied
-                - risk_reduction * x.score * x.pred_pos_rate_implied
-                + x.p_y,
-            )
-            if nb_thresholds is not None:
-                for nb_threshold in nb_thresholds:
-                    roc_df = roc_df.assign(
-                        **{
-                            f"nb_{nb_threshold}_implied": lambda x: -1
-                            * (1 - x.npv_implied)
-                            * (1 - x.pred_pos_rate_implied)
-                            - (1 - risk_reduction)
-                            * x.ppv_implied
-                            * x.pred_pos_rate_implied
-                            - risk_reduction * nb_threshold * x.pred_pos_rate_implied
-                            + x.p_y,
-                        }
-                    )
-
-        return roc_df
-
-    def bootstrap_roc_df(
-        self,
-        df,
-        n_boot=10,
-        strata_vars_eval=None,
-        strata_vars_boot=None,  # required
-        strata_var_replicate=None,
-        replicate_aggregation_mode=None,
-        strata_var_experiment=None,
-        baseline_experiment_name=None,
-        result_name="performance",
-        weight_var=None,
-        label_var="labels",
-        pred_prob_var="pred_probs",
-        patient_id_var="person_id",
-        n_jobs=None,
-        verbose=False,
-        metrics=["fpr", "tpr", "nb", "nb_all", "nb_none", "nb_implied"],
-        perform_aggregation=True,
-        bootstrap_result_no_agg=None,
-        use_apply=False,
-        **kwargs,
-    ):
-        """
-        Arguments
-            df: A dataframe to evaluate
-            n_boot: The number of bootstrap iterations
-            stata_vars_eval: The variables for perform stratified evaluation on
-            strata_vars_boot: The variables to stratify the bootstrap sampling on
-            strata_vars_replicate: A variable designating replicates
-            replicate_aggregation_mode: None or 'mean'
-            strata_var_experiment: The variable designating experimental condition column
-            baseline_experiment_name: An element of strata_var_experiment column designating a baseline experiment
-            result_name: The name of the returned metrics in the result dataframe
-            weight_var: The variable designating sample weights
-            label_var: The variable designating the outcome variable
-            pred_probs_var: The variable designating the predicted score
-            n_jobs: If None, runs bootstrap iterations serially. Otherwise, specifies the number of jobs for joblib parallelization. -1 uses all cores
-        """
-
-        def compute_bootstrap(i=None, verbose=False):
-            if verbose:
-                print(f"Bootstrap iteration: {i}")
-            cohort_boot = (
-                df[
-                    [patient_id_var] + strata_vars_boot
-                    if strata_vars_boot is not None
-                    else [patient_id_var]
-                ]
-                .drop_duplicates()
-                .groupby(strata_vars_boot)
-                .sample(frac=1.0, replace=True)
-            )
-
-            df_boot = df.merge(cohort_boot)
-            return self.get_roc_df(
-                df=df_boot,
-                strata_vars=strata_vars_eval,
-                weight_var=weight_var,
-                label_var=label_var,
-                pred_prob_var=pred_prob_var,
-                **kwargs,
-            )
-
-        if bootstrap_result_no_agg is None:
-            if n_jobs is not None:
-                result = Parallel(n_jobs=n_jobs)(
-                    delayed(compute_bootstrap)(i, verbose=verbose)
-                    for i in range(n_boot)
-                )
-                result_df = (
-                    pd.concat(result, keys=np.arange(len(result)))
-                    .reset_index(level=-1, drop=True)
-                    .rename_axis("boot_id")
-                    .reset_index()
-                )
-            else:
-                result_df_dict = {}
-                for i in range(n_boot):
-                    result_df_dict[i] = compute_bootstrap(i, verbose=verbose)
-                result_df = (
-                    pd.concat(result_df_dict)
-                    .reset_index(level=-1, drop=True)
-                    .rename_axis("boot_id")
-                    .reset_index()
-                )
-        else:
-            result_df = bootstrap_result_no_agg
-
-        if not perform_aggregation:
-            return result_df
-
-        strata_vars_ci = strata_vars_eval + ["score_id"]
-        result_df = result_df.assign(score_id=lambda x: x.groupby("score").ngroup())
-        score_df = result_df[["score", "score_id"]].drop_duplicates()
-
-        print("Performing melt")
-        result_long = result_df.melt(
-            id_vars=strata_vars_ci + ["boot_id"],
-            value_vars=metrics,
-            var_name="metric",
-            value_name="performance",
-        )
-
-        if strata_var_replicate is not None:
-            strata_vars_ci.remove(strata_var_replicate)
-            if replicate_aggregation_mode is None:
-                pass
-            elif replicate_aggregation_mode == "mean":
-                result_df = (
-                    result_df.groupby(strata_vars_ci + ["metric", "boot_id"])
-                    .agg(performance=("performance", "mean"),)
-                    .reset_index()
-                )
-            else:
-                raise ValueError("Invalid aggregation mode")
-
-        if (strata_var_experiment is not None) and (
-            baseline_experiment_name is not None
-        ):
-
-            result_df_baseline = result_long.query(
-                f"{strata_var_experiment} == @baseline_experiment_name",
-            )
-            result_df_baseline = result_df_baseline.drop(
-                columns=[strata_var_experiment]
-            )
-
-            result_df_baseline = result_df_baseline.rename(
-                columns={"performance": "performance_baseline"}
-            ).reset_index(drop=True)
-
-            print("Merging baseline results")
-            result_df_merged = result_long.merge(result_df_baseline)
-            result_df = result_df_merged
-
-            assert result_long.shape[0] == result_df_merged.shape[0]
-
-            print("Appending baseline results")
-            result_df["performance_delta"] = (
-                result_df["performance"] - result_df["performance_baseline"]
-            )
-            print("Computing statistics")
-            if use_apply:
-                result_df_ci = (
-                    result_df.groupby(strata_vars_ci + ["metric"])
-                    .apply(
-                        lambda x: pd.DataFrame(
-                            {
-                                "comparator": np.quantile(
-                                    x["performance"], [0.025, 0.5, 0.975]
-                                ),
-                                "baseline": np.quantile(
-                                    x["performance_baseline"], [0.025, 0.5, 0.975]
-                                ),
-                                "delta": np.quantile(
-                                    x["performance_delta"], [0.025, 0.5, 0.975]
-                                ),
-                            }
-                        )
-                        .rename_axis("CI_quantile_95")
-                        .rename(
-                            {i: el for i, el in enumerate(["lower", "mid", "upper"])}
-                        )
-                    )
-                    .reset_index()
-                )
-            else:
-                result_dict_ci = {}
-                for i, (group_id, group_df) in enumerate(
-                    result_df.groupby(strata_vars_ci + ["metric"])
-                ):
-                    print(group_id)
-                    result_dict_ci[group_id] = (
-                        pd.DataFrame(
-                            {
-                                "comparator": np.quantile(
-                                    group_df["performance"].values, [0.025, 0.5, 0.975]
-                                ),
-                                "baseline": np.quantile(
-                                    group_df["performance_baseline"].values,
-                                    [0.025, 0.5, 0.975],
-                                ),
-                                "delta": np.quantile(
-                                    group_df["performance_delta"].values,
-                                    [0.025, 0.5, 0.975],
-                                ),
-                            }
-                        )
-                        .rename_axis("CI_quantile_95")
-                        .rename(
-                            {i: el for i, el in enumerate(["lower", "mid", "upper"])}
-                        )
-                    )
-                result_df_ci = pd.concat(result_dict_ci)
-                result_df_ci = (
-                    result_df_ci.reset_index(level=-1)
-                    .rename_axis(strata_vars_ci + ["metric"])
-                    .reset_index()
-                )
-
-            result_df_ci = result_df_ci.merge(score_df)
-        else:
-            result_df_ci = (
-                result_long.groupby(strata_vars_ci + ["metric"])
-                .apply(lambda x: np.quantile(x["performance"], [0.025, 0.5, 0.975]))
-                .rename("performance")
-                .to_frame()
-                .reset_index()
-                .assign(
-                    CI_lower=lambda x: x["performance"].str[0],
-                    CI_med=lambda x: x["performance"].str[1],
-                    CI_upper=lambda x: x["performance"].str[2],
-                )
-                .drop(columns=["performance"])
-            )
-            result_df_ci = result_df_ci.merge(score_df)
-
-        return result_df_ci
-
-    def bootstrap_roc_df2(
-        self,
-        df,
-        n_boot=10,
-        strata_vars_eval=None,
-        strata_vars_boot=None,  # required
-        strata_var_replicate=None,
-        replicate_aggregation_mode=None,
-        strata_var_experiment=None,
-        baseline_experiment_name=None,
-        result_name="performance",
-        weight_var=None,
-        label_var="labels",
-        pred_prob_var="pred_probs",
-        patient_id_var="person_id",
-        n_jobs=None,
-        verbose=False,
-        metrics=["fpr", "tpr", "nb", "nb_all", "nb_none", "nb_implied"],
-        perform_aggregation=True,
-        bootstrap_result_no_agg=None,
-        use_apply=False,
-        **kwargs,
-    ):
-        """
-        Arguments
-            df: A dataframe to evaluate
-            n_boot: The number of bootstrap iterations
-            stata_vars_eval: The variables for perform stratified evaluation on
-            strata_vars_boot: The variables to stratify the bootstrap sampling on
-            strata_vars_replicate: A variable designating replicates
-            replicate_aggregation_mode: None or 'mean'
-            strata_var_experiment: The variable designating experimental condition column
-            baseline_experiment_name: An element of strata_var_experiment column designating a baseline experiment
-            result_name: The name of the returned metrics in the result dataframe
-            weight_var: The variable designating sample weights
-            label_var: The variable designating the outcome variable
-            pred_probs_var: The variable designating the predicted score
-            n_jobs: If None, runs bootstrap iterations serially. Otherwise, specifies the number of jobs for joblib parallelization. -1 uses all cores
-        """
-
-        def compute_bootstrap(i=None, verbose=False):
-            if verbose:
-                print(f"Bootstrap iteration: {i}")
-            cohort_boot = (
-                df[
-                    [patient_id_var] + strata_vars_boot
-                    if strata_vars_boot is not None
-                    else [patient_id_var]
-                ]
-                .drop_duplicates()
-                .groupby(strata_vars_boot)
-                .sample(frac=1.0, replace=True)
-            )
-
-            df_boot = df.merge(cohort_boot)
-            return self.get_roc_df(
-                df=df_boot,
-                strata_vars=strata_vars_eval,
-                weight_var=weight_var,
-                label_var=label_var,
-                pred_prob_var=pred_prob_var,
-                **kwargs,
-            )
-
-        if bootstrap_result_no_agg is None:
-            if n_jobs is not None:
-                result = Parallel(n_jobs=n_jobs)(
-                    delayed(compute_bootstrap)(i, verbose=verbose)
-                    for i in range(n_boot)
-                )
-                result_df = (
-                    pd.concat(result, keys=np.arange(len(result)))
-                    .reset_index(level=-1, drop=True)
-                    .rename_axis("boot_id")
-                    .reset_index()
-                )
-            else:
-                result_df_dict = {}
-                for i in range(n_boot):
-                    result_df_dict[i] = compute_bootstrap(i, verbose=verbose)
-                result_df = (
-                    pd.concat(result_df_dict)
-                    .reset_index(level=-1, drop=True)
-                    .rename_axis("boot_id")
-                    .reset_index()
-                )
-        else:
-            result_df = bootstrap_result_no_agg
-
-        if not perform_aggregation:
-            return result_df
-
-        result_df = result_df[strata_vars_eval + ["boot_id", "score"] + metrics]
-
-        strata_vars_ci = strata_vars_eval + ["score_id"]
-        result_df = result_df.assign(score_id=lambda x: x.groupby("score").ngroup())
-        score_df = result_df[["score", "score_id"]].drop_duplicates()
-        result_df = result_df.drop(columns="score")
-
-        if strata_var_replicate is not None:
-            strata_vars_ci.remove(strata_var_replicate)
-            if replicate_aggregation_mode is None:
-                pass
-            elif replicate_aggregation_mode == "mean":
-                raise NotImplementedError
-            else:
-                raise ValueError("Invalid aggregation mode")
-
-        if (strata_var_experiment is not None) and (
-            baseline_experiment_name is not None
-        ):
-
-            result_df_baseline = result_df.query(
-                f"{strata_var_experiment} == @baseline_experiment_name",
-            )
-            result_df_baseline = result_df_baseline.drop(
-                columns=[strata_var_experiment]
-            )
-
-            result_df_baseline = result_df_baseline.rename(
-                columns={f"{metric}": f"{metric}_baseline" for metric in metrics}
-            )
-
-            print("Merging baseline results")
-            result_df_merged = result_df.merge(result_df_baseline)
-
-            assert result_df.shape[0] == result_df_merged.shape[0]
-
-            print("Computing statistics")
-            if use_apply:
-                result_df_ci = (
-                    result_df_merged.groupby(strata_vars_ci + ["metric"])
-                    .apply(
-                        lambda x: pd.DataFrame(
-                            {
-                                "comparator": np.quantile(
-                                    x["performance"], [0.025, 0.5, 0.975]
-                                ),
-                                "baseline": np.quantile(
-                                    x["performance_baseline"], [0.025, 0.5, 0.975]
-                                ),
-                                "delta": np.quantile(
-                                    x["performance_delta"], [0.025, 0.5, 0.975]
-                                ),
-                            }
-                        )
-                        .rename_axis("CI_quantile_95")
-                        .rename(
-                            {i: el for i, el in enumerate(["lower", "mid", "upper"])}
-                        )
-                    )
-                    .reset_index()
-                )
-            else:
-                result_dict_ci = {}
-                for i, (group_id, group_df) in enumerate(
-                    result_df_merged.groupby(strata_vars_ci)
-                ):
-                    print(group_id)
-                    for metric in metrics:
-                        result_dict_ci[tuple(list(group_id) + [metric])] = (
-                            pd.DataFrame(
-                                {
-                                    "comparator": np.quantile(
-                                        group_df[metric].values, [0.025, 0.5, 0.975]
-                                    ),
-                                    "baseline": np.quantile(
-                                        group_df[f"{metric}_baseline"].values,
-                                        [0.025, 0.5, 0.975],
-                                    ),
-                                    "delta": np.quantile(
-                                        group_df[f"{metric}"].values
-                                        - group_df[f"{metric}_baseline"].values,
-                                        [0.025, 0.5, 0.975],
-                                    ),
-                                }
-                            )
-                            .rename_axis("CI_quantile_95")
-                            .rename(
-                                {
-                                    i: el
-                                    for i, el in enumerate(["lower", "mid", "upper"])
-                                }
-                            )
-                        )
-                result_df_ci = pd.concat(result_dict_ci)
-                result_df_ci = (
-                    result_df_ci.reset_index(level=-1)
-                    .rename_axis(strata_vars_ci + ["metric"])
-                    .reset_index()
-                )
-
-            result_df_ci = result_df_ci.merge(score_df)
-        else:
-            raise NotImplementedError
-
-        return result_df_ci
 
 
 class BinningEstimator:
@@ -2211,67 +1559,18 @@ def recall_at_threshold(labels, pred_probs, sample_weight=None, threshold=0.5):
     )
 
 
-def generate_recall_at_threshold(threshold, weighted=False, recalibrate=False):
-    """
-    Returns a lambda function that computes the recall at a provided threshold.
-    If weights = True, the lambda function takes a third argument for the sample weights
-    """
-    if not recalibrate:
-        if not weighted:
-            return lambda labels, pred_probs: recall_score(
-                labels, 1.0 * (pred_probs >= threshold)
-            )
-        else:
-            return lambda labels, pred_probs, sample_weight: recall_score(
-                labels, 1.0 * (pred_probs >= threshold), sample_weight=sample_weight
-            )
-    else:
-        if not weighted:
-            return lambda labels, pred_probs: recall_score(
-                labels,
-                1.0
-                * (
-                    pred_probs
-                    >= calibrate_threshold(labels, pred_probs, threshold=threshold)
-                ),
-            )
-        else:
-            return lambda labels, pred_probs, sample_weight: recall_score(
-                labels,
-                1.0
-                * (
-                    pred_probs
-                    >= calibrate_threshold(
-                        labels,
-                        pred_probs,
-                        threshold=threshold,
-                        sample_weight=sample_weight,
-                    )
-                ),
-                sample_weight=sample_weight,
-            )
-
-
-def pred_pos_rate_at_threshold(labels, pred_probs, sample_weight=None, threshold=0.5):
-    return threshold_metric_fn(
-        labels=labels,
-        pred_probs=pred_probs,
-        sample_weight=sample_weight,
-        threshold=threshold,
-        metric_generator_fn=generate_pred_pos_rate_at_threshold,
-    )
-
-
-def generate_pred_pos_rate_at_threshold(threshold, weighted=False):
+def generate_recall_at_threshold(threshold, weighted=False):
     """
     Returns a lambda function that computes the recall at a provided threshold.
     If weights = True, the lambda function takes a third argument for the sample weights
     """
     if not weighted:
-        return lambda labels, pred_probs: (1.0 * (pred_probs >= threshold)).mean()
+        return lambda labels, pred_probs: recall_score(
+            labels, 1.0 * (pred_probs >= threshold)
+        )
     else:
-        return lambda labels, pred_probs, sample_weight: np.average(
-            1.0 * (pred_probs >= threshold), weights=sample_weight
+        return lambda labels, pred_probs, sample_weight: recall_score(
+            labels, 1.0 * (pred_probs >= threshold), sample_weight=sample_weight
         )
 
 
@@ -2319,19 +1618,6 @@ def specificity_at_threshold(labels, pred_probs, sample_weight=None, threshold=0
     )
 
 
-def fpr_at_threshold(labels, pred_probs, sample_weight=None, threshold=0.5):
-    """
-    Computes specificity at a threshold
-    """
-    return threshold_metric_fn(
-        labels=labels,
-        pred_probs=pred_probs,
-        sample_weight=sample_weight,
-        threshold=threshold,
-        metric_generator_fn=generate_fpr_at_threshold,
-    )
-
-
 def generate_specificity_at_threshold(threshold, weighted=False):
     """
     Returns a lambda function that computes the specificity at a provided threshold.
@@ -2355,175 +1641,6 @@ def generate_specificity_at_threshold(threshold, weighted=False):
             if (labels == 0).sum() > 0
             else 0.0
         )
-
-
-def generate_fpr_at_threshold(threshold, weighted=False, recalibrate=False):
-
-    if not recalibrate:
-        if not weighted:
-            return lambda labels, pred_probs: (
-                1
-                - generate_specificity_at_threshold(
-                    threshold=threshold, weighted=weighted
-                )(labels, pred_probs)
-            )
-        else:
-            return lambda labels, pred_probs, sample_weight: (
-                1
-                - generate_specificity_at_threshold(
-                    threshold=threshold, weighted=weighted
-                )(labels, pred_probs, sample_weight=sample_weight)
-            )
-    else:
-        if not weighted:
-            return lambda labels, pred_probs: (
-                1
-                - generate_specificity_at_threshold(
-                    threshold=calibrate_threshold(
-                        labels, pred_probs, threshold=threshold
-                    ),
-                    weighted=weighted,
-                )(labels, pred_probs)
-            )
-        else:
-            return lambda labels, pred_probs, sample_weight: (
-                1
-                - generate_specificity_at_threshold(
-                    threshold=calibrate_threshold(
-                        labels,
-                        pred_probs,
-                        threshold=threshold,
-                        sample_weight=sample_weight,
-                    ),
-                    weighted=weighted,
-                )(labels, pred_probs, sample_weight=sample_weight)
-            )
-
-
-def npv_at_threshold(labels, pred_probs, sample_weight=None, threshold=0.5):
-    """
-    Computes negative predictive value at a threshold
-    """
-    return threshold_metric_fn(
-        labels=labels,
-        pred_probs=pred_probs,
-        sample_weight=sample_weight,
-        threshold=threshold,
-        metric_generator_fn=generate_npv_at_threshold,
-    )
-
-
-def generate_npv_at_threshold(threshold, weighted=False):
-    """
-    Returns a lambda function that computes the negative predictive value at a provided threshold.
-    If weighted = True, the lambda function takes a third argument for the sample weights
-    """
-    if not weighted:
-        return lambda labels, pred_probs: precision_score(
-            1 - labels, 1.0 * (pred_probs < threshold), zero_division=1
-        )
-    else:
-        return lambda labels, pred_probs, sample_weight: precision_score(
-            1 - labels,
-            1.0 * (pred_probs < threshold),
-            zero_division=1,
-            sample_weight=sample_weight,
-        )
-
-
-def calibrate_threshold(labels, pred_probs, threshold, sample_weight=None):
-    """
-    Uses logistic regression to compute recalibrate a threshold
-    """
-    calibration_evaluator = CalibrationEvaluator()
-    model = calibration_evaluator.get_calibration_curve(
-        labels=labels,
-        pred_probs=pred_probs,
-        sample_weight=sample_weight,
-        model_type="logistic",
-        transform="logit",
-        return_model=True,
-    )[-1]
-    return scipy.special.expit(
-        (scipy.special.logit(threshold) - model.intercept_[0]) / model.coef_[0][0]
-    )
-
-
-def net_benefit(labels, pred_probs, threshold, sample_weight=None, recalibrate=False):
-    """
-    Computes the net benefit assuming the provided threshold is optimal with a fixed-cost utility function
-    If recalibrate=True, the threshold is adjusted to account for miscalibration
-    """
-    tradeoff_threshold = threshold
-    if recalibrate:
-        threshold = calibrate_threshold(
-            labels, pred_probs, threshold, sample_weight=sample_weight
-        )
-
-    p_y = np.average(labels, weights=sample_weight)
-    fpr = 1 - specificity_at_threshold(
-        labels, pred_probs, threshold=threshold, sample_weight=sample_weight
-    )
-    tpr = recall_at_threshold(
-        labels, pred_probs, threshold=threshold, sample_weight=sample_weight
-    )
-    return tpr * p_y - fpr * (tradeoff_threshold / (1 - tradeoff_threshold))
-
-
-def net_benefit_rr(
-    labels,
-    pred_probs,
-    threshold,
-    sample_weight=None,
-    risk_reduction=0.275,
-    recalibrate=False,
-):
-    """
-    Computes the net benefit assuming the provided threshold is optimal
-        Assuming constant relative risk reduction given by the input parameter
-    If recalibrate=True, the threshold is adjusted to account for miscalibration
-    """
-    tradeoff_threshold = threshold
-    if recalibrate:
-        threshold = calibrate_threshold(
-            labels, pred_probs, threshold, sample_weight=sample_weight
-        )
-
-    p_y = np.average(labels, weights=sample_weight)
-    npv = npv_at_threshold(
-        labels, pred_probs, threshold=threshold, sample_weight=sample_weight
-    )
-    ppv = precision_at_threshold(
-        labels, pred_probs, threshold=threshold, sample_weight=sample_weight
-    )
-    pred_pos_rate = pred_pos_rate_at_threshold(
-        labels, pred_probs, threshold=threshold, sample_weight=sample_weight
-    )
-    nb = (
-        -1 * (1 - npv) * (1 - pred_pos_rate)
-        - pred_pos_rate
-        * ((1 - risk_reduction) * ppv + risk_reduction * tradeoff_threshold)
-        + p_y
-    )
-    return nb
-
-
-def generate_net_benefit(threshold, recalibrate=False):
-
-    return lambda *args, **kwargs: net_benefit(
-        *args, threshold=threshold, recalibrate=recalibrate, **kwargs
-    )
-
-
-def generate_net_benefit_rr(threshold, risk_reduction=0.275, recalibrate=False):
-
-    return lambda *args, **kwargs: net_benefit_rr(
-        *args,
-        threshold=threshold,
-        risk_reduction=0.275,
-        recalibrate=recalibrate,
-        **kwargs,
-    )
 
 
 def threshold_metric_fn(
@@ -2839,16 +1956,13 @@ def absolute_calibration_error(*args, **kwargs):
     evaluator = CalibrationEvaluator()
     return evaluator.absolute_calibration_error(*args, **kwargs)
 
-
 def relative_calibration_error(*args, **kwargs):
     evaluator = CalibrationEvaluator()
     return evaluator.relative_calibration_error(*args, **kwargs)
 
-
 def threshold_calibration_error(*args, **kwargs):
     evaluator = CalibrationEvaluator()
     return evaluator.threshold_calibration_error(*args, **kwargs)
-
 
 def generate_threshold_calibration_error(
     threshold, metric_variant="abs", model_type="logistic", transform="logit"
