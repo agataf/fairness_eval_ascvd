@@ -8,18 +8,27 @@ import math
 
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from torch.utils.data import TensorDataset, DataLoader
-from fairness_ascvd.prediction_utils.pytorch_utils.datasets import ArrayDataset
-# from fairness_ascvd.prediction_utils.pytorch_utils.metrics import StandardEvaluator, FairOVAEvaluator, CalibrationEvaluator
-from fairness_ascvd.prediction_utils.pytorch_utils.models import TorchModel
-from fairness_ascvd.prediction_utils.pytorch_utils.robustness import GroupDROModel
+# from fairness_ascvd.prediction_utils.pytorch_utils.datasets import ArrayDataset
+# from fairness_ascvd.prediction_utils.pytorch_utils.models import TorchModel
+# from fairness_ascvd.prediction_utils.pytorch_utils.robustness import GroupDROModel
 
-from fairness_ascvd.prediction_utils.util import yaml_write
+# from fairness_ascvd.prediction_utils.util import yaml_write
 
-from fairness_ascvd.prediction_utils.pytorch_utils.layers import LinearLayer
-from fairness_ascvd.prediction_utils.pytorch_utils.lagrangian import MultiLagrangianThresholdRateModel
-from fairness_ascvd.prediction_utils.pytorch_utils.group_fairness import EqualThresholdRateModel
+# from fairness_ascvd.prediction_utils.pytorch_utils.layers import LinearLayer
+# from fairness_ascvd.prediction_utils.pytorch_utils.lagrangian import MultiLagrangianThresholdRateModel
+# from fairness_ascvd.prediction_utils.pytorch_utils.group_fairness import EqualThresholdRateModel
 
-# todo: make linear layer an argument into those model classes
+from prediction_utils.pytorch_utils.datasets import ArrayDataset
+from prediction_utils.pytorch_utils.models import TorchModel
+from prediction_utils.pytorch_utils.robustness import GroupDROModel
+
+from prediction_utils.util import yaml_write
+
+from prediction_utils.pytorch_utils.layers import LinearLayer
+from prediction_utils.pytorch_utils.lagrangian import MultiLagrangianThresholdRateModel
+from prediction_utils.pytorch_utils.group_fairness import EqualThresholdRateModel
+
+
 class EqualThresholdRateModelLinear(EqualThresholdRateModel):
     """
     Override default to use logistic regression
@@ -48,18 +57,15 @@ class Dataset:
             # TODO: consider changing how interactions are constructed
             poly_fitter = PolynomialFeatures(degree=deg, include_bias=False)
             self.features = poly_fitter.fit_transform(df[feature_columns].to_numpy())
-            self.feature_names = poly_fitter.get_feature_names(feature_columns)
+            self.feature_names = poly_fitter.get_feature_names_out(feature_columns)
+            #self.feature_names = poly_fitter.get_feature_names(feature_columns)
             assert len(self.feature_names) == self.features.shape[1]
         else:
             self.features = df[feature_columns].to_numpy()
             self.feature_names = feature_columns
         
         self.scaler = StandardScaler()
-            
-        # Create dictionaries
-#         val_fold_id = '1'
-#         test_fold_id = 'test'
-
+        
         self.df_dict_uncensored = {
             'train': df.query('(fold_id != @val_fold_id) & (fold_id != @test_fold_id) & (censored_10yr != 1.0)'),
             'val': df.query('(fold_id == @val_fold_id) & (censored_10yr != 1.0)'),
@@ -138,7 +144,6 @@ class Dataset:
             for key in self.features_dict_uncensored.keys()
         }
         
-        # TODO: seed?
         self.loaders_dict = {
             key: DataLoader(value, batch_size=batch_size, shuffle=True)
             for key, value in self.dataset_dict.items()
@@ -188,94 +193,6 @@ def model_setup(config_dict, logger, args):
 
     return model, logger
 
-# def add_ranges(df, one_hot=False, threshold1 = 0.075, threshold2 = 0.2):
-    
-#     range1 = (df.pred_probs < threshold1).astype(int)
-#     range2 = ((df.pred_probs >= threshold1) & (df.pred_probs < threshold2)).astype(int)
-#     range3 = ((df.pred_probs >= threshold2)).astype(int)
-
-#     if one_hot:
-#         df = df.assign(treat0=range1, treat1=range2, treat2=range3)
-#     else:
-#         rang = 1*range2 + 2*range3
-#         df = df.assign(treat=rang)
-        
-#     return df
-
-# def treat_relative_risk(df):
-#     ldlc_reductions_by_treatment = {0: 1, 1: 0.7, 2: 0.5}
-#     relative_risk_statin = 0.75
-
-#     absolute_ldlc_reduction = df.ldlc*(1-df.treat.map(ldlc_reductions_by_treatment))
-
-#     return [math.pow(relative_risk_statin, el/38.7) for el in absolute_ldlc_reduction]
-
-# def evaluation(output_df_eval, args, config_dict, logger):
-
-# #     # general evaluation
-# #     output_df_eval, result_df_eval = (
-# #         predict_dict["outputs"],
-# #         predict_dict["performance"]
-# #     )
-
-# #     logger.info(result_df_eval)
-
-# #     # Dump evaluation result to disk
-# #     result_df_eval.to_parquet(
-# #         os.path.join(args['result_path'], "result_df_training_eval.parquet"),
-# #         index=False,
-# #         engine="pyarrow",
-# #     )
-
-# #     if args.get('save_outputs'):
-# #         output_df_eval.to_parquet(
-# #             os.path.join(args['result_path'], "output_df.parquet"),
-# #             index=False,
-# #             engine="pyarrow",
-# #         )
-
-#     # by-group evaluation
-#     if args['run_evaluation_group_standard']:
-#         evaluator = StandardEvaluator(threshold_metrics = config_dict['logging_threshold_metrics'],
-#                                       thresholds = config_dict['logging_thresholds'],
-#                                      metrics = config_dict['eval_metrics'])
-
-#         eval_general_args = {'df': output_df_eval,
-#                              'label_var': 'labels',
-#                              'pred_prob_var': 'pred_probs',
-#                              'weight_var': 'weights'}
-
-#         general_eval = evaluator.get_result_df(**eval_general_args)
-
-#         logger.info(general_eval)
-#         general_eval.to_parquet(
-#             os.path.join(
-#                 args['result_path'], "result_df_group_standard_eval.parquet"
-#             ),
-#             engine="pyarrow",
-#             index=False,
-#         )
-        
-#     # fairness criteria evaluation
-#     if args['run_evaluation_group_fair_ova']:
-#         evaluator = FairOVAEvaluator()
-#         eval_fair_args = {'df': output_df_eval,
-#                       'label_var': 'labels',
-#                       'pred_prob_var': 'pred_probs',
-#                       'weight_var': 'weights',
-#                       'group_var_name': 'group'}
-
-#         result_df_group_fair_ova = evaluator.get_result_df(**eval_fair_args)
-
-#         logger.info(result_df_group_fair_ova)
-#         result_df_group_fair_ova.to_parquet(
-#             os.path.join(args['result_path'], "result_df_group_fair_ova.parquet"),
-#             engine="pyarrow",
-#             index=False,
-#             )
-        
-#     # TODO: add calibration eval
-#     return logger
 
 def get_dict_subset(dictionary, keys):
     return dict([(key,dictionary[key]) for key in keys])

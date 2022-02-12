@@ -1,9 +1,10 @@
 HOME_DIR="/labs/shahlab/projects/agataf/bmj_paper"
 REPO_PATH=$HOME_DIR"/fairness_ascvd/fairness_ascvd"
-# TODO: rename to DATA_PATH
-# BASE_PATH=$HOME_DIR"/data/cohorts/pooled_cohorts"
-BASE_PATH=$HOME_DIR"/data_final"
-#COHORT_PATH=$BASE_PATH"/cohort/all_cohorts.csv"
+
+# TODO: update back!!
+BASE_PATH="/labs/shahlab/projects/agataf/data_final"
+#BASE_PATH=$HOME_DIR"/experiments/evaluation"
+
 COHORT_PATH=$BASE_PATH"/cohort/all_cohorts_old.csv"
 
 RESULT_PATH=$BASE_PATH"/experiments"
