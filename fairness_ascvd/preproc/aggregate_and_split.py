@@ -46,7 +46,7 @@ def patient_split(df, test_frac=0.1, eval_frac=0.1, nfold=10, seed=657):
 df = (pd
       .read_csv(os.path.join(args.cohort_path, 'all.csv'))
       .assign(event_time      = lambda x: x.event_time_10yr,
-               event_indicator = lambda x: x.ascvd_10yr)
+              event_indicator = lambda x: x.ascvd_10yr)
      )
 
 # Stratified splitting

@@ -15,12 +15,8 @@ from lifelines import KaplanMeierFitter, LogNormalFitter, WeibullFitter
 from fairness_ascvd.prediction_utils.util import yaml_write
 
 from fairness_ascvd.prediction_utils.pytorch_utils.group_fairness import group_regularized_model
-#from fairness_ascvd.prediction_utils.pytorch_utils.robustness import group_robust_model
-#from fairness_ascvd.prediction_utils.pytorch_utils.lagrangian import group_lagrangian_model
-
 from fairness_ascvd.prediction_utils.pytorch_utils.metrics import (
-    StandardEvaluator,
-    #FairOVAEvaluator,
+    StandardEvaluator
 )
 
 # from prediction_utils.pytorch_utils.models import TorchModel
@@ -541,24 +537,6 @@ parser.set_defaults(
 
 )
 
-
-# def filter_cohort(cohort, subset_attribute=None, subset_group=None):
-#     # Global filter
-#     if "gender_concept_name" in cohort.columns:
-#         cohort = cohort.query('gender_concept_name != "No matching concept"')
-
-#     # Custom filter
-#     if (subset_attribute is not None) and (subset_group is not None):
-#         if not (subset_attribute in cohort.columns):
-#             raise ValueError("subset_attribute not in cohort columns")
-#         cohort = cohort.query(
-#             "{subset_attribute} == '{subset_group}'".format(
-#                 subset_attribute=subset_attribute, subset_group=subset_group
-#             )
-#         )
-#     return cohort
-
-
 def read_file(filename, columns=None, **kwargs):
     load_extension = os.path.splitext(filename)[-1]
     if load_extension == ".parquet":
@@ -636,13 +614,6 @@ if __name__ == "__main__":
     all_weights = get_censoring(cohort, by_group = args.censoring_by_group, model_type = args.censoring_model_type)
     cohort = cohort.join(all_weights)
     
-#     print(cohort.head())
-#     print(cohort.tail())
-#     print(cohort.columns)
-#     print(config_dict.get('stopping_fold_id'))
-#     print(config_dict.get('batch_size'))
-
-    # TODO: replace with Stephen's loader eventually
     data = train_utils.Dataset(cohort, deg=2,
                                feature_columns = ['age', 'totchol', 'hdlc', 'rxsbp', 'unrxsbp', 'bmi', 'diabt126', 'cursmoke', 'race_black', 'gender_male'],
                                val_fold_id = config_dict.get('stopping_fold_id'),
@@ -656,10 +627,6 @@ if __name__ == "__main__":
         assert args.sensitive_attribute is not None
         if args.group_objective_type == "regularized":
             model_class = group_regularized_model(config_dict["group_objective_metric"])
-#         elif args.group_objective_type == "dro":
-#             model_class = group_robust_model(config_dict["group_objective_metric"])
-#         elif args.group_objective_type == "lagrangian":
-#             model_class = group_lagrangian_model(config_dict["group_objective_metric"])
         else:
             raise ValueError("group_objective_type not defined")
 
@@ -672,7 +639,6 @@ if __name__ == "__main__":
     
     result_df = (model
                  .train(data.loaders_dict)["performance"]
-                 #.assign(group = lambda x: x.group.astype(str))
                 )
 
     # Dump training results to disk
@@ -735,15 +701,3 @@ if __name__ == "__main__":
                     engine="pyarrow",
                     index=False,
                 )
-#             if args.run_evaluation_group_fair_ova:
-#                 evaluator = FairOVAEvaluator()
-#                 result_df_group_fair_ova = evaluator.get_result_df(
-#                     df = output_df_eval, 
-#                     weight_var = 'weights'
-#                 ).assign(group = lambda x: x.group.astype(str))
-#                 logging.info(result_df_group_fair_ova)
-#                 result_df_group_fair_ova.to_parquet(
-#                     os.path.join(args.result_path, "result_df_group_fair_ova.parquet"),
-#                     engine="pyarrow",
-#                     index=False,
-#                 )

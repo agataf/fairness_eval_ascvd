@@ -112,6 +112,15 @@ class StandardEvaluator:
                     if weight_var is None:
                         strata_dict[metric] = metric_func(labels, pred_probs)
                     else:
+                        print(df.groupby(strata_vars).count())
+                        print(min(labels),max(labels))
+                        print(min(pred_probs), max(pred_probs))
+                        print(min(sample_weight), max(sample_weight))
+                        print(metric_func)
+                        print(len(labels))
+                        print(strata_id, strata_df.shape)
+                        print(strata_df)
+                        
                         strata_dict[metric] = metric_func(
                             labels, pred_probs, sample_weight=sample_weight
                         )

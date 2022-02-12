@@ -1,0 +1,26 @@
+group,study,counts,age,prev_weighted,censored_10yr
+Black women,ARIC,1812.0,53.17,5.7%,6.51%
+Black women,CARDIA,232.0,43.03,4.42%,8.19%
+Black women,CHS,304.0,70.7,22.52%,15.46%
+Black women,JHS,1310.0,51.4,2.77%,14.96%
+Black women,MESA,768.0,60.29,5.18%,9.64%
+Black women,all,4426.0,54.55,5.69%,10.26%
+non-Black women,ARIC,4815.0,53.89,2.54%,3.3%
+non-Black women,CARDIA,289.0,42.74,0.39%,6.23%
+non-Black women,CHS,1848.0,70.67,20.18%,15.58%
+non-Black women,FHS_OS,828.0,46.38,2.61%,1.81%
+non-Black women,MESA,1913.0,60.51,3.81%,7.68%
+non-Black women,all,9693.0,57.42,5.95%,6.47%
+Black men,ARIC,1216.0,53.79,9.61%,10.03%
+Black men,CARDIA,153.0,42.66,1.63%,14.38%
+Black men,CHS,181.0,70.47,30.89%,27.62%
+Black men,JHS,751.0,51.11,4.47%,14.11%
+Black men,MESA,630.0,60.88,7.19%,13.17%
+Black men,all,2931.0,55.08,8.15%,13.07%
+non-Black men,ARIC,4383.0,54.52,7.17%,4.86%
+non-Black men,CARDIA,333.0,42.54,0.9%,6.91%
+non-Black men,CHS,1169.0,71.02,32.0%,17.45%
+non-Black men,FHS_OS,856.0,47.06,8.67%,3.86%
+non-Black men,MESA,1828.0,60.83,6.67%,10.07%
+non-Black men,all,8569.0,56.91,10.36%,7.67%
+All,all,25619.0,56.49,7.54%,8.28%

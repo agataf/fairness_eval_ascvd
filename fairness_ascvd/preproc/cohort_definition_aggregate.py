@@ -26,7 +26,8 @@ model_vars = ['cohort_pid', 'age', 'race_black', 'gender_male',
      'ascvd_10yr', 'censored_10yr', 'event_time_10yr', 'bmi']
      
 def exclude(df):    
-    excl_race = df.racegrp.isna()
+    #excl_race = df.racegrp.isna()
+    excl_race = df.grp.isna()
     excl_age = ~df.age.between(40,79)
     excl_prevcond = ((df.prevcond== 1) | (df.max_time <= 0))
     excl_statin = (df.cholmed == 1)
@@ -95,7 +96,7 @@ df_final = (df.
                    gender      = lambda x: x.gender.map({'M': 'male', 'F': 'female'}),
                    race_black  = lambda x: 1.0 * (x.race == 'black'), 
                    gender_male = lambda x: 1.0 * (x.gender == 'male'),
-                   grp         = lambda x: (x.race == 'white')*1 + (x.gender == 'male')*2 + 1,
+                   grp         = lambda x: (1-x.race_black)*1 + (x.gender_male)*2 + 1,
                    ascvd_10yr  = lambda x: (x.timetoascvd <= 10) & (x.ascvd == 1),
                    censored_10yr   = lambda x: (x.event_time <= 10) & (x.ascvd == 0),
                    event_time_10yr = lambda x: np.minimum(x.event_time, 10)
@@ -108,7 +109,6 @@ df_final = (df.
            )
 
 if args.print_info:
-    #print(args.study, 'cohort extraction:\n')
     print(df.shape[0], '\t subjects in input file')
 
     missing_cols = set(input_vars) - set(df.columns)
@@ -128,8 +128,6 @@ cohort = (cohort_excl
           .filter(items = model_vars)
           .dropna()
          )
-
-
 
 if args.print_info:
     print(cohort_excl.shape[0]-cohort.shape[0], '\t removed: missing variables')

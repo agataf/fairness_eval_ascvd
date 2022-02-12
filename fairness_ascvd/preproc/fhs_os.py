@@ -156,6 +156,7 @@ races = (race_ex1
  .drop(columns=['h702_x', 'h702_y'])
  .assign(racegrp = lambda x: get_racegrp(x),
         ethnicity = lambda x: get_ethnicity(x))
+         # if race is unknown, assume white, since at least one of the parents is white
  .assign(racegrp = lambda x: x.racegrp.replace('nan', 'W'))
  .filter(['racegrp', 'ethnicity'])
 )

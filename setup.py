@@ -20,6 +20,8 @@ setup(
                       'scipy==1.8.0',
                       'setuptools==58.0.4',
                       'seaborn==0.11.0',
-                      'torch==1.8.0'
+                      'torch==1.8.0',
+                      'xlrd >= 1.0.0',
+                      'openpyxl'
                      ]
 )

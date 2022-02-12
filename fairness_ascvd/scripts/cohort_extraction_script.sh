@@ -11,9 +11,6 @@ var_dir=$COHORT_PATH'/cohort_extraction/variables'
 coh_dir=$COHORT_PATH'/cohort_extraction/cohorts'
 final_cohort_file=$COHORT_PATH'/all_cohorts.csv'
 
-
-# TODO: include original paths?
-
 for study in 'mesa' 'fhs_os' 'chs' 'aric' 'jhs' 'cardia'
 do
     python ${REPO_PATH}/preproc/${study}.py --input_dir $RAW_DATA_PATH --output_dir $var_dir

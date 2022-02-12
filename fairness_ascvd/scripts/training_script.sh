@@ -1,9 +1,7 @@
 BASE_PATH="/labs/shahlab/projects/agataf/bmj_paper"
 REPO_PATH=$BASE_PATH"/fairness_ascvd/fairness_ascvd"
 
-# TODO: update!!!
-COHORT_PATH="/labs/shahlab/projects/agataf/data/cohorts/pooled_cohorts/cohort/all_cohorts.csv"
-#COHORT_PATH=$BASE_PATH"/pce_data/all_cohorts.csv"
+COHORT_PATH=$BASE_PATH"/pce_data/all_cohorts_old.csv"
 
 # generate grid
 python $REPO_PATH/train/create_grid_all.py --data_path $BASE_PATH --experiment_name_prefix final

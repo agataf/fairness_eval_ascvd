@@ -20,13 +20,11 @@ preds_all = []
 
 # only consider values of lambda up to 0.1
 
-# TODO: update experiment names to be more descriptive
-
 model_type_names = {'original_pce': 'PCE',
                     'revised_pce': 'rPCE',
-                    'apr14_erm': 'UC',
-                    'apr14_erm_rec_logit': 'rUC',
-                    'scratch_thr': 'EO'
+                    'final_erm': 'UC',
+                    'final_erm_rec_logit': 'rUC',
+                    'final_eq_odds_thr': 'EO'
                    }
 
 eqodds_threshold = 0.1
@@ -48,7 +46,7 @@ for experiment in model_type_names.keys():
     preds_all.append(preds) 
 preds_all = pd.concat(preds_all)
 
-# TODO: try getting rid of it
+
 # Fixing inconsistent race coding
 cohort = pd.read_csv(args.cohort_path)
 df = (cohort
@@ -67,8 +65,6 @@ preds_all = (preds_all
 
 # run evaluation
 
-# TODO: update to new version of package
-# TODO: elementwise comparison failed... (metrics:144)
 evaluator = StandardEvaluator(thresholds = [0.075, 0.2],
                                  metrics = ['auc', 
                                             'ace_rmse_logistic_logit',

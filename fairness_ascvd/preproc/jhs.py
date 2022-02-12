@@ -36,7 +36,7 @@ def read_file(filename, files_dict, index='subjid'):
         df = pd.read_sas(path)
         df[index] = df[index].str.decode(encoding = 'utf-8')
     elif file_extension == 'xlsx':
-        df = pd.read_excel(path)
+        df = pd.read_excel(path, engine='openpyxl')
     else:
         raise ValueError('filename must be of type csv, dta or sas7bdat')
     

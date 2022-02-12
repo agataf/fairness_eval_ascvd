@@ -54,11 +54,9 @@ class Dataset:
     def __init__(self, df, feature_columns, deg=1, val_fold_id = '1', test_fold_id = 'test', eval_fold_id = 'eval', batch_size=128):
 
         if deg > 1:
-            # TODO: consider changing how interactions are constructed
             poly_fitter = PolynomialFeatures(degree=deg, include_bias=False)
             self.features = poly_fitter.fit_transform(df[feature_columns].to_numpy())
             self.feature_names = poly_fitter.get_feature_names_out(feature_columns)
-            #self.feature_names = poly_fitter.get_feature_names(feature_columns)
             assert len(self.feature_names) == self.features.shape[1]
         else:
             self.features = df[feature_columns].to_numpy()
