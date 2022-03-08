@@ -1,4 +1,4 @@
-# fairness_ascvd
+# fairness_eval_ascvd
 
 Code to accompany "Evaluating algorithmic fairness in the presence of clinical guidelines: the case of atherosclerotic cardiovascular disease risk estimation. (in press) BMJ Health & Care Informatics, 2022.", by A Foryciarz, SR Pfohl, B Patel and NH Shah.
 
